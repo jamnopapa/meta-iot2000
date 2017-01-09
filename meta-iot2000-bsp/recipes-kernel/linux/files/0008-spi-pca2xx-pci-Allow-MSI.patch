@@ -1,0 +1,59 @@
+From def09880ea5a783c36db0764eb209d8a2099ea4a Mon Sep 17 00:00:00 2001
+From: Jan Kiszka <jan.kiszka@siemens.com>
+Date: Mon, 26 Sep 2016 08:52:49 +0200
+Subject: [PATCH 8/9] spi: pca2xx-pci: Allow MSI
+
+Now that the core is ready for edge-triggered interrupts, we can safely
+allow the PCI versions that provide this to enable the feature and,
+thus, have less shared interrupts.
+
+Signed-off-by: Jan Kiszka <jan.kiszka@siemens.com>
+---
+ drivers/spi/spi-pxa2xx-pci.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/spi/spi-pxa2xx-pci.c b/drivers/spi/spi-pxa2xx-pci.c
+index 562ffc1..1a8dc45 100644
+--- a/drivers/spi/spi-pxa2xx-pci.c
++++ b/drivers/spi/spi-pxa2xx-pci.c
+@@ -156,16 +156,19 @@ static int pxa2xx_spi_pci_probe(struct pci_dev *dev,
+ 		dev_err(&dev->dev, "failed to ioremap() registers\n");
+ 		return -EIO;
+ 	}
+-	ssp->irq = dev->irq;
+ 	ssp->port_id = (c->port_id >= 0) ? c->port_id : dev->devfn;
+ 	ssp->type = c->type;
+ 
+ 	snprintf(buf, sizeof(buf), "pxa2xx-spi.%d", ssp->port_id);
+ 	ssp->clk = clk_register_fixed_rate(&dev->dev, buf , NULL,
+ 					CLK_IS_ROOT, c->max_clk_rate);
+-	 if (IS_ERR(ssp->clk))
++	if (IS_ERR(ssp->clk))
+ 		return PTR_ERR(ssp->clk);
+ 
++	pci_set_master(dev);
++	pci_enable_msi(dev);
++	ssp->irq = dev->irq;
++
+ 	memset(&pi, 0, sizeof(pi));
+ 	pi.parent = &dev->dev;
+ 	pi.name = "pxa2xx-spi";
+@@ -177,6 +180,7 @@ static int pxa2xx_spi_pci_probe(struct pci_dev *dev,
+ 	pdev = platform_device_register_full(&pi);
+ 	if (IS_ERR(pdev)) {
+ 		clk_unregister(ssp->clk);
++		pci_disable_msi(dev);
+ 		return PTR_ERR(pdev);
+ 	}
+ 
+@@ -194,6 +198,7 @@ static void pxa2xx_spi_pci_remove(struct pci_dev *dev)
+ 
+ 	platform_device_unregister(pdev);
+ 	clk_unregister(spi_pdata->ssp.clk);
++	pci_disable_msi(dev);
+ }
+ 
+ static const struct pci_device_id pxa2xx_spi_pci_devices[] = {
+-- 
+2.1.4
+
